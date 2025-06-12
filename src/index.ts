@@ -30,7 +30,7 @@ export class FortyTwoProxy {
     private clientSecret: string,
     conf: Partial<Conf>
   ) {
-    const config = { ...defaultConf, conf };
+    const config = { ...defaultConf, ...conf };
 
     this.baseUrl = config.baseUrl;
     this.tokenUrl = config.tokenUrl;
@@ -80,33 +80,29 @@ export class FortyTwoProxy {
     } catch (err: any) {
       // SuperTest error object has a 'status' and 'response'
       if (err && err.status) {
-        console.log(`${method} ${url} \x1b[41m${err.status}\x1b[0m`);
-      } else if (err && err.response && err.response.status) {
-        console.log(err.response.status);
-      } else {
-        console.log("No status code available");
+        console.log(`\x1b[41m${err.status}\x1b[0m ${method} ${url}`);
+        return {};
       }
-      console.error(err);
-      return null;
+      throw err;
     }
   }
 
   // Public methods
 
   public async get(endpoint: string) {
-    return this.reqHandler("GET", endpoint);
+    return this.reqHandler("GET", this.baseUrl + endpoint);
   }
 
   public async post(endpoint: string, body: any) {
-    return this.reqHandler("POST", endpoint, body);
+    return this.reqHandler("POST", this.baseUrl + endpoint, body);
   }
 
   public async patch(endpoint: string, body: any) {
-    return this.reqHandler("PATCH", endpoint, body);
+    return this.reqHandler("PATCH", this.baseUrl + endpoint, body);
   }
 
   public async delete(endpoint: string) {
-    return this.reqHandler("DELETE", endpoint);
+    return this.reqHandler("DELETE", this.baseUrl + endpoint);
   }
 
   public async getAll(endpoint: string) {
