@@ -5,14 +5,16 @@ import { initRequest } from "./utils";
 import { Method } from "./types";
 
 interface Conf {
-  logger: boolean;
+  logs: boolean;
+  errors: boolean;
   rate: number;
   baseUrl: string;
   tokenUrl: string;
 }
 
 const defaultConf: Conf = {
-  logger: false,
+  logs: true,
+  errors: true,
   rate: 2,
   baseUrl: "https://api.intra.42.fr/v2/",
   tokenUrl: "https://api.intra.42.fr/oauth/token",
@@ -21,7 +23,7 @@ const defaultConf: Conf = {
 export class FortyTwoProxy {
   private access_token: string | null;
   private throttler: any;
-  private logger: boolean;
+  private logs: boolean;
   private baseUrl: string;
   private tokenUrl: string;
 
@@ -35,7 +37,7 @@ export class FortyTwoProxy {
     this.baseUrl = config.baseUrl;
     this.tokenUrl = config.tokenUrl;
     this.access_token = null;
-    this.logger = config.logger;
+    this.logs = config.logs;
     this.throttler = new Throttle({
       rate: config.rate,
       ratePer: 1100,
@@ -71,51 +73,95 @@ export class FortyTwoProxy {
     return req;
   }
 
-  private async reqHandler(method: Method, url: string, body?: any) {
+  private async reqHandler(
+    method: Method,
+    url: string,
+    body: any = null,
+    retry: number = 0
+  ): Promise<any> {
     try {
       const res = await this.fetch(method, url, body);
-      if (this.logger)
-        console.log(`\x1b[42m${res.status}\x1b[0m ${method} ${url}`);
+      this.log(res.status, method, url, retry);
       return res.body;
     } catch (err: any) {
       // SuperTest error object has a 'status' and 'response'
       if (err && err.status) {
-        console.log(`\x1b[41m${err.status}\x1b[0m ${method} ${url}`);
-        return {};
+        this.log(err.status, method, url, retry);
+        this.error(err.response.body)
+        if (retry < 5 && (err.status === 429 || err.status === 401)) {
+          return this.reqHandler(method, url, body, retry + 1);
+        }
       }
       throw err;
     }
   }
 
+  public log(status: number, method: string, url: string, retry: number = 0) {
+    if (!this.logs) {
+      return;
+    }
+
+    method = method.padEnd(6, " ");
+    url = url.slice(this.baseUrl.length - 4);
+    const color = status >= 200 && status < 400 ? "\x1b[42m" : "\x1b[41m";
+    const reset = "\x1b[0m";
+
+    const msg = `${color}${status}${reset} ${method} ${url}${
+      retry ? ` (retry ${retry})` : ``
+    }`;
+    console.log(msg);
+  }
+
+  public error(err: any) {
+    if (!this.logs) {
+      return;
+    }
+    console.error(err);
+  }
+
   // Public methods
 
-  public async get(endpoint: string) {
-    return this.reqHandler("GET", this.baseUrl + endpoint);
+  public async get(endpoint: URL | string) {
+    if (endpoint instanceof URL === false) {
+      endpoint = new URL(endpoint, this.baseUrl);
+    }
+    return this.reqHandler("GET", endpoint.toString());
   }
 
-  public async post(endpoint: string, body: any) {
-    return this.reqHandler("POST", this.baseUrl + endpoint, body);
+  public async post(endpoint: URL | string, body: any) {
+    if (endpoint instanceof URL === false) {
+      endpoint = new URL(endpoint, this.baseUrl);
+    }
+    return this.reqHandler("POST", endpoint.toString(), body);
   }
 
-  public async patch(endpoint: string, body: any) {
-    return this.reqHandler("PATCH", this.baseUrl + endpoint, body);
+  public async patch(endpoint: URL | string, body: any) {
+    if (endpoint instanceof URL === false) {
+      endpoint = new URL(endpoint, this.baseUrl);
+    }
+    return this.reqHandler("PATCH", endpoint.toString(), body);
   }
 
-  public async delete(endpoint: string) {
-    return this.reqHandler("DELETE", this.baseUrl + endpoint);
+  public async delete(endpoint: URL | string, body: any) {
+    if (endpoint instanceof URL === false) {
+      endpoint = new URL(endpoint, this.baseUrl);
+    }
+    return this.reqHandler("DELETE", endpoint.toString(), body);
   }
 
-  public async getAll(endpoint: string) {
+  public async getAll(endpoint: URL | string, perPage: number = 100) {
+    if (endpoint instanceof URL === false) {
+      endpoint = new URL(endpoint, this.baseUrl);
+    }
+
     const all: any[] = [];
     let page = 1;
     let done = false;
 
     while (!done) {
-      const url = new URL(this.baseUrl + endpoint);
-      const params = new URLSearchParams(url.search);
-      params.set("per_page", "100");
-      params.set("page", page.toString());
-      url.search = params.toString();
+      const url = new URL(endpoint);
+      url.searchParams.append("per_page", perPage.toString());
+      url.searchParams.append("page", page.toString());
 
       const items = await this.reqHandler("GET", url.toString());
 
@@ -132,5 +178,9 @@ export class FortyTwoProxy {
     }
 
     return all;
+  }
+
+  public URL(endpoint: string) {
+    return new URL(endpoint, this.baseUrl);
   }
 }
