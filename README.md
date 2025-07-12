@@ -204,6 +204,12 @@ Disable logging by setting `logs: false` in the configuration.
 
 This library is written in TypeScript and includes full type definitions:
 
+```typescript
+import { IntraApiProxy } from '@ibertran/intra-api-proxy';
+
+// Types are automatically inferred
+const client = new IntraApiProxy('client_id', 'client_secret');
+```
 
 ### OAuth Flow Example
 
