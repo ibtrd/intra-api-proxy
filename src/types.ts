@@ -1,6 +1,8 @@
 export type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
-export type userToken = {};
+export type userToken = {
+  access_token: string;
+};
 
 export type reqOptions = {
   method: Method;
@@ -8,7 +10,10 @@ export type reqOptions = {
   attempt: number;
   body?: any;
   token?: userToken;
+  query?: querystring;
 };
+
+export type querystring = Record<string, string | number | boolean | Array<string | number | boolean>>;
 
 export type perPage = { perPage?: number };
 

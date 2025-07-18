@@ -1,7 +1,7 @@
 import * as superagent from "superagent";
 // @ts-ignore
 import Throttle from "superagent-throttle";
-import { initRequest } from "./utils";
+import { getLastPage, initRequest } from "./utils";
 import { inputOptions, perPage, reqOptions } from "./types";
 
 interface Conf {
@@ -9,7 +9,7 @@ interface Conf {
   base_url: string;
   token_url: string;
   oauth_url: string;
-  oauth_scope: string[];
+  scope: string[];
   rate: number;
   maxRetry: number;
   logs: boolean;
@@ -21,7 +21,7 @@ const defaultConf: Conf = {
   base_url: "https://api.intra.42.fr/v2/",
   token_url: "https://api.intra.42.fr/oauth/token",
   oauth_url: "https://api.intra.42.fr/oauth/authorize",
-  oauth_scope: ["public"],
+  scope: ["public"],
   rate: 2,
   maxRetry: 5,
   logs: true,
@@ -33,7 +33,7 @@ export class IntraApiProxy {
   private base_url: string;
   private token_url: string;
   private oauth_url: string;
-  private oauth_scope: string[];
+  private scope: string[];
   private throttler: any;
   private maxRetry: number;
   private logs: boolean;
@@ -51,7 +51,7 @@ export class IntraApiProxy {
     this.base_url = config.base_url;
     this.token_url = config.token_url;
     this.oauth_url = config.oauth_url;
-    this.oauth_scope = config.oauth_scope;
+    this.scope = config.scope;
     this.throttler = new Throttle({
       rate: config.rate,
       ratePer: 1100,
@@ -68,6 +68,7 @@ export class IntraApiProxy {
       grant_type: "client_credentials",
       client_id: this.client_id,
       client_secret: this.client_secret,
+      scope: this.scope.join(" "),
     });
 
     return res.body.access_token;
@@ -82,10 +83,13 @@ export class IntraApiProxy {
     }
 
     // Attach access_token
-    // @ts-ignore // TODO interface
-    const accesToken = options.token ? options.token.access_token : this.access_token;
-    req.set("Authorization", `Bearer ${accesToken}`);
+    const accessToken = options.token
+      ? options.token.access_token
+      : this.access_token;
+    req.set("Authorization", `Bearer ${accessToken}`);
 
+    // Add query string
+    if (options.query) req.query(options.query);
     // Send body if any is provided
     if (body) req.send(body);
 
@@ -98,7 +102,7 @@ export class IntraApiProxy {
     try {
       const res = await this.fetch(url, options);
       this.log(res.status, url, options);
-      return res.body;
+      return res;
     } catch (err: any) {
       if (err && err.status) {
         const { attempt, maxRetry } = options;
@@ -152,48 +156,56 @@ export class IntraApiProxy {
       endpoint = new URL(endpoint, this.base_url);
     }
 
-    return this.reqHandler(endpoint, {
+     const res = await this.reqHandler(endpoint, {
       method: "GET",
       attempt: 0,
       maxRetry: this.maxRetry,
       ...options,
     });
+
+    return res.body;
   }
 
   public async post(endpoint: URL | string, options: inputOptions = {}) {
     if (endpoint instanceof URL === false) {
       endpoint = new URL(endpoint, this.base_url);
     }
-    return this.reqHandler(endpoint, {
+    const res = await this.reqHandler(endpoint, {
       method: "POST",
       attempt: 0,
       maxRetry: this.maxRetry,
       ...options,
     });
+
+    return res.body;
   }
 
   public async patch(endpoint: URL | string, options: inputOptions) {
     if (endpoint instanceof URL === false) {
       endpoint = new URL(endpoint, this.base_url);
     }
-    return this.reqHandler(endpoint, {
+    const res = await this.reqHandler(endpoint, {
       method: "PATCH",
       attempt: 0,
       maxRetry: this.maxRetry,
       ...options,
     });
+
+    return res.body;
   }
 
   public async delete(endpoint: URL | string, options: inputOptions) {
     if (endpoint instanceof URL === false) {
       endpoint = new URL(endpoint, this.base_url);
     }
-    return this.reqHandler(endpoint, {
+    const res = await this.reqHandler(endpoint, {
       method: "DELETE",
       attempt: 0,
       maxRetry: this.maxRetry,
       ...options,
     });
+
+    return res.body;
   }
 
   public async getAll(
@@ -205,35 +217,45 @@ export class IntraApiProxy {
     }
 
     const all: any[] = [];
-    const perPage = (options.perPage || 100).toString();
-    let page = 1;
-    let done = false;
+    const perPage = options.perPage || 100;
 
-    while (!done) {
-      const url = new URL(endpoint);
-      url.searchParams.append("per_page", perPage);
-      url.searchParams.append("page", page.toString());
+    let url = new URL(endpoint);
+    url.searchParams.append("per_page", perPage.toString());
+    url.searchParams.append("page", "1");
 
-      const items = await this.reqHandler(url, {
-        method: "GET",
-        attempt: 0,
-        maxRetry: this.maxRetry,
-        ...options,
-      });
+    const initialRes = await this.reqHandler(url, {
+      method: "GET",
+      attempt: 0,
+      maxRetry: this.maxRetry,
+      ...options,
+    });
 
-      if (!Array.isArray(items)) {
-        return items;
-      }
-      all.push(...items);
-
-      if (items.length < 100) {
-        done = true;
-      } else {
-        page += 1;
-      }
+    let lastPage: number;
+    try {
+      lastPage = getLastPage(initialRes.header['link']);
+    } catch (err) {
+      return initialRes.body;
     }
 
-    return all;
+    const promises = [];
+    for (let i = 2; i <= lastPage; i++) {
+      url = new URL(endpoint);
+      url.searchParams.append("per_page", perPage.toString());
+      url.searchParams.append("page", i.toString());
+
+      promises.push(
+        this.reqHandler(url, {
+          method: "GET",
+          attempt: 0,
+          maxRetry: this.maxRetry,
+          ...options,
+        })
+      );
+    }
+
+    return Promise.all(promises).then((values) => {
+      return initialRes.body.concat(...values.map(value => value.body));
+    });
   }
 
   public URL(endpoint: string) {
@@ -250,7 +272,7 @@ export class IntraApiProxy {
     url.searchParams.set("client_id", this.client_id);
     url.searchParams.set("redirect_uri", redirect_uri);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", this.oauth_scope.join(" "));
+    url.searchParams.set("scope", this.scope.join(" "));
 
     return url.toString();
   }
