@@ -9,7 +9,8 @@ interface Conf {
   base_url: string;
   token_url: string;
   oauth_url: string;
-  scope: string[];
+  token_info_url: string;
+  scopes: string[];
   rate: number;
   maxRetry: number;
   logs: boolean;
@@ -21,7 +22,8 @@ const defaultConf: Conf = {
   base_url: "https://api.intra.42.fr/v2/",
   token_url: "https://api.intra.42.fr/oauth/token",
   oauth_url: "https://api.intra.42.fr/oauth/authorize",
-  scope: ["public"],
+  token_info_url: "https://api.intra.42.fr/oauth/token/info",
+  scopes: ["public"],
   rate: 2,
   maxRetry: 5,
   logs: true,
@@ -33,7 +35,8 @@ export class IntraApiProxy {
   private base_url: string;
   private token_url: string;
   private oauth_url: string;
-  private scope: string[];
+  private token_info_url: string;
+  private scopes: string[];
   private throttler: any;
   private maxRetry: number;
   private logs: boolean;
@@ -51,7 +54,8 @@ export class IntraApiProxy {
     this.base_url = config.base_url;
     this.token_url = config.token_url;
     this.oauth_url = config.oauth_url;
-    this.scope = config.scope;
+    this.token_info_url = config.token_info_url;
+    this.scopes = config.scopes;
     this.throttler = new Throttle({
       rate: config.rate,
       ratePer: 1100,
@@ -68,7 +72,7 @@ export class IntraApiProxy {
       grant_type: "client_credentials",
       client_id: this.client_id,
       client_secret: this.client_secret,
-      scope: this.scope.join(" "),
+      scope: this.scopes.join(" "),
     });
 
     return res.body.access_token;
@@ -101,14 +105,13 @@ export class IntraApiProxy {
   private async reqHandler(url: URL, options: reqOptions): Promise<any> {
     try {
       const res = await this.fetch(url, options);
-      this.log(res.status, url, options);
+      this.log(res.status, res?.request?.url || url.href, options);
       return res;
     } catch (err: any) {
       if (err && err.status) {
         const { attempt, maxRetry } = options;
 
-        this.log(err.status, url, options);
-        this.error(err.response.body);
+        this.log(err.status, err?.response?.request?.url || url.href, options, err.response.body);
         if (
           maxRetry > 0 &&
           attempt < maxRetry &&
@@ -125,7 +128,7 @@ export class IntraApiProxy {
     }
   }
 
-  public log(status: number, url: URL, options: reqOptions) {
+  public log(status: number, url: string, options: reqOptions, err?: any) {
     if (!this.logs) {
       return;
     }
@@ -220,14 +223,15 @@ export class IntraApiProxy {
     const perPage = options.perPage || 100;
 
     let url = new URL(endpoint);
-    url.searchParams.append("per_page", perPage.toString());
-    url.searchParams.append("page", "1");
-
     const initialRes = await this.reqHandler(url, {
       method: "GET",
       attempt: 0,
       maxRetry: this.maxRetry,
       ...options,
+      query: {
+        page: 1,
+        per_page: 100,
+      }
     });
 
     let lastPage: number;
@@ -272,7 +276,7 @@ export class IntraApiProxy {
     url.searchParams.set("client_id", this.client_id);
     url.searchParams.set("redirect_uri", redirect_uri);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", this.scope.join(" "));
+    url.searchParams.set("scope", this.scopes.join(" "));
 
     return url.toString();
   }
@@ -287,5 +291,9 @@ export class IntraApiProxy {
     });
 
     return res.body;
+  }
+
+  public async tokenInfos() {
+     return this.get(this.token_info_url);
   }
 }

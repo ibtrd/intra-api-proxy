@@ -37,7 +37,7 @@ interface Conf {
   base_url: string;                 // API base URL (default: "https://api.intra.42.fr/v2/")
   token_url: string;                // Token endpoint (default: "https://api.intra.42.fr/oauth/token")
   oauth_url: string;                // OAuth endpoint (default: "https://api.intra.42.fr/oauth/authorize")
-  oauth_scope: string[];            // OAuth scopes (default: ["public"])
+  scopes: string[];                 // OAuth scopes (default: ["public"])
   rate: number;                     // Requests per second (default: 2)
   maxRetry: number;                 // Max retry attempts (default: 5)
   logs: boolean;                    // Enable logging (default: true)
@@ -49,10 +49,10 @@ interface Conf {
 
 ```typescript
 const client = new IntraApiProxy('your_client_id', 'your_client_secret', {
-  rate: 1,                    // 1 request per second
-  maxRetry: 3,               // Retry up to 3 times
-  logs: false,               // Disable logging
-  oauth_scope: ['public', 'projects']  // Extended scopes
+  rate: 1,                        // 1 request per second
+  maxRetry: 3,                    // Retry up to 3 times
+  logs: false,                    // Disable logging
+  scopes: ['public', 'projects']  // Extended scopes
 });
 ```
 

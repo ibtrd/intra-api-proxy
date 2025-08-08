@@ -2,15 +2,17 @@ import * as superagent from "superagent";
 import { Method } from "./types";
 
 export function initRequest(method: Method, url: URL) {
+  const endpoint = url.toString()
+
   switch (method) {
     case "GET":
-      return superagent.get(url.toString());
+      return superagent.get(endpoint);
     case "POST":
-      return superagent.post(url.toString());
+      return superagent.post(endpoint);
     case "PATCH":
-      return superagent.patch(url.toString());
+      return superagent.patch(endpoint);
     case "DELETE":
-      return superagent.delete(url.toString());
+      return superagent.delete(endpoint);
     default:
       throw Error("Invalid HTTP method");
   }
