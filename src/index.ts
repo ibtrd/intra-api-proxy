@@ -3,6 +3,7 @@ import * as superagent from "superagent";
 import Throttle from "superagent-throttle";
 import { getLastPage, initRequest } from "./utils";
 import { inputOptions, perPage, reqOptions } from "./types";
+import { isSuperAgentError, simplifySuperagentError } from "./HttpError";
 
 interface Conf {
   redirect_uri: string | null;
@@ -38,6 +39,7 @@ export class IntraApiProxy {
   private token_info_url: string;
   private scopes: string[];
   private throttler: any;
+  private retryOn: number[];
   private maxRetry: number;
   private logs: boolean;
 
@@ -61,6 +63,7 @@ export class IntraApiProxy {
       ratePer: 1100,
       concurrent: config.rate - 1 > 0 ? config.rate - 1 : 1,
     });
+    this.retryOn = [401, 429, 500];
     this.maxRetry = config.maxRetry;
     this.logs = config.logs;
 
@@ -105,49 +108,56 @@ export class IntraApiProxy {
   private async reqHandler(url: URL, options: reqOptions): Promise<any> {
     try {
       const res = await this.fetch(url, options);
-      this.log(res.status, res?.request?.url || url.href, options);
+      this.logSuccess(res, options);
       return res;
     } catch (err: any) {
-      if (err && err.status) {
+      if (isSuperAgentError(err)) {
         const { attempt, maxRetry } = options;
 
-        this.log(err.status, err?.response?.request?.url || url.href, options, err.response.body);
+        this.logError(err, url, options);
         if (
           maxRetry > 0 &&
           attempt < maxRetry &&
-          (err.status === 429 || err.status === 401)
+          this.retryOn.includes(err.status)
         ) {
           if (err.status === 401) {
             this.access_token = null;
           }
           options.attempt++;
           return this.reqHandler(url, options);
+        } else {
+          throw simplifySuperagentError(err);
         }
+      } else {
+        throw err;
       }
-      throw err;
     }
   }
 
-  public log(status: number, url: string, options: reqOptions, err?: any) {
-    if (!this.logs) {
-      return;
-    }
-
+  private logSuccess(res: superagent.Response, options: reqOptions) {
     const method = options.method.padEnd(6, " ");
-    const color = status >= 200 && status < 400 ? "\x1b[42m" : "\x1b[41m";
+    const color = "\x1b[42m";
     const reset = "\x1b[0m";
 
-    const msg = `${color}${status}${reset} ${method} ${url}${
+    const msg = `${color + res.status + reset} ${method} ${res.request.url}${
       options.attempt ? ` retry ${options.attempt}/${options.maxRetry}` : ``
     }`;
     console.log(msg);
   }
 
-  public error(err: any) {
-    if (!this.logs || Object.keys(err).length === 0) {
-      return;
-    }
-    console.error(err);
+  private logError(
+    err: superagent.HTTPError & { response: superagent.Response },
+    url: URL,
+    options: reqOptions
+  ) {
+    const method = options.method.padEnd(6, " ");
+    const color = "\x1b[41m";
+    const reset = "\x1b[0m";
+
+    const msg = `${color + err.status + reset} ${method} ${
+      err.response.request.url
+    }${options.attempt ? ` retry ${options.attempt}/${options.maxRetry}` : ``}`;
+    console.log(msg, JSON.stringify(err.response.body, null, 2));
   }
 
   // Public methods
@@ -159,7 +169,7 @@ export class IntraApiProxy {
       endpoint = new URL(endpoint, this.base_url);
     }
 
-     const res = await this.reqHandler(endpoint, {
+    const res = await this.reqHandler(endpoint, {
       method: "GET",
       attempt: 0,
       maxRetry: this.maxRetry,
@@ -219,7 +229,6 @@ export class IntraApiProxy {
       endpoint = new URL(endpoint, this.base_url);
     }
 
-    const all: any[] = [];
     const perPage = options.perPage || 100;
 
     let url = new URL(endpoint);
@@ -231,12 +240,12 @@ export class IntraApiProxy {
       query: {
         page: 1,
         per_page: 100,
-      }
+      },
     });
 
     let lastPage: number;
     try {
-      lastPage = getLastPage(initialRes.header['link']);
+      lastPage = getLastPage(initialRes.header["link"]);
     } catch (err) {
       return initialRes.body;
     }
@@ -258,7 +267,7 @@ export class IntraApiProxy {
     }
 
     return Promise.all(promises).then((values) => {
-      return initialRes.body.concat(...values.map(value => value.body));
+      return initialRes.body.concat(...values.map((value) => value.body));
     });
   }
 
@@ -294,6 +303,6 @@ export class IntraApiProxy {
   }
 
   public async tokenInfos() {
-     return this.get(this.token_info_url);
+    return this.get(this.token_info_url);
   }
 }
