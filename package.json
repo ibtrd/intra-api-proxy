@@ -1,5 +1,5 @@
 {
-  "name": "@ibertran/intra-api-proxy",
+  "name": "@ibertran/fortytwo-intra-client",
   "version": "1.2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -5,7 +5,7 @@ import { getLastPage, initRequest } from "./utils";
 import { inputOptions, perPage, reqOptions } from "./types";
 import { isSuperAgentError, simplifySuperagentError } from "./HttpError";
 
-interface Conf {
+export interface FortytwoIntraClientConf {
   redirect_uri: string | null;
   base_url: string;
   token_url: string;
@@ -18,7 +18,7 @@ interface Conf {
   errors: boolean;
 }
 
-const defaultConf: Conf = {
+const defaultConf: FortytwoIntraClientConf = {
   redirect_uri: null,
   base_url: "https://api.intra.42.fr/v2/",
   token_url: "https://api.intra.42.fr/oauth/token",
@@ -31,7 +31,7 @@ const defaultConf: Conf = {
   errors: true,
 };
 
-export class IntraApiProxy {
+export class FortytwoIntraClient {
   private redirect_uri: string | null;
   private base_url: string;
   private token_url: string;
@@ -48,9 +48,9 @@ export class IntraApiProxy {
   constructor(
     private client_id: string,
     private client_secret: string,
-    conf: Partial<Conf>
+    conf: Partial<FortytwoIntraClientConf>
   ) {
-    const config: Conf = { ...defaultConf, ...conf };
+    const config: FortytwoIntraClientConf = { ...defaultConf, ...conf };
 
     this.redirect_uri = config.redirect_uri;
     this.base_url = config.base_url;

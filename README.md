@@ -1,19 +1,19 @@
-# Intra API Proxy
+# FortytwoIntraClient
 
 A TypeScript library for interacting with the 42API with built-in rate limiting, automatic token management, and retry logic.
 
 ## Installation
 
 ```bash
-npm install @ibertran/intra-api-proxy
+npm install @ibertran/fortytwo-intra-client
 ```
 
 ## Quick Start
 
 ```typescript
-import { IntraApiProxy } from '@ibertran/intra-api-proxy';
+import { FortytwoIntraClient } from '@ibertran/fortytwo-intra-client';
 
-const client = new IntraApiProxy('your_client_id', 'your_client_secret');
+const client = new FortytwoIntraClient('your_client_id', 'your_client_secret');
 
 
 // Get a specific user by login
@@ -23,7 +23,7 @@ console.log(user);
 
 ## Configuration
 
-The `IntraApiProxy` class accepts three parameters:
+The `FortytwoIntraClient` class accepts three parameters:
 
 1. `client_id` (required): Your 42 API client ID
 2. `client_secret` (required): Your 42 API client secret  
@@ -48,7 +48,7 @@ interface Conf {
 ### Example with Custom Configuration
 
 ```typescript
-const client = new IntraApiProxy('your_client_id', 'your_client_secret', {
+const client = new FortytwoIntraClient('your_client_id', 'your_client_secret', {
   rate: 1,                        // 1 request per second
   maxRetry: 3,                    // Retry up to 3 times
   logs: false,                    // Disable logging
@@ -205,20 +205,20 @@ Disable logging by setting `logs: false` in the configuration.
 This library is written in TypeScript and includes full type definitions:
 
 ```typescript
-import { IntraApiProxy } from '@ibertran/intra-api-proxy';
+import { FortytwoIntraClient } from '@ibertran/fortytwo-intra-client';
 
 // Types are automatically inferred
-const client = new IntraApiProxy('client_id', 'client_secret');
+const client = new FortytwoIntraClient('client_id', 'client_secret');
 ```
 
 ### OAuth Flow Example
 
 ```typescript
 import express from 'express';
-import { IntraApiProxy } from '@ibertran/intra-api-proxy';
+import { FortytwoIntraClient } from '@ibertran/fortytwo-intra-client';
 
 const app = express();
-const client = new IntraApiProxy(
+const client = new FortytwoIntraClient(
   process.env.INTRA_CLIENT_ID!,
   process.env.INTRA_CLIENT_SECRET!,
   { 
